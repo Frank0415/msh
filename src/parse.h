@@ -4,7 +4,8 @@
 #include "../include/my_shell.h"
 
 args parseargs(int argc, char **argv);
-void eval(char *cmd);
-void split(char *cmd, char *args[MAX_ARGS]);
+void eval(char *cmd, char **args);
+void exec(char *cmd, char **args, char **envp);
+void split(char *cmd, char **args);
 
 #endif

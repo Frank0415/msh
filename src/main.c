@@ -1,9 +1,10 @@
 #include "../include/my_shell.h"
+#include "memalloc.h"
 #include "parse.h"
 #include "stdio.h"
 #include "stdlib.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[], char *envp[]) {
   // To Do: to be moved to args func
   args in_args = parseargs(argc, argv);
   if (in_args.wrong) {
@@ -12,7 +13,9 @@ int main(int argc, char *argv[]) {
   }
 
   // To Do: to be moved to a function
-  char *cmdline = malloc(sizeof(char) * MAX_INPUT_LENGTH);
+
+  char *cmdline = cmdline_alloc();
+  char **args = args_list_alloc();
 
   while (1) {
     if (1) {
@@ -23,10 +26,11 @@ int main(int argc, char *argv[]) {
     fgets(cmdline, MAX_INPUT_LENGTH, stdin);
 
     if (feof(stdin)) {
-      free(cmdline);
+      free_all(cmdline, args);
       exit(0);
     }
-    eval(cmdline);
+    eval(cmdline, args);
+    exec(cmdline, args, envp); // how can I setup environ array to setup the env var?
   }
 
   free(cmdline);
