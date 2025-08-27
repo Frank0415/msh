@@ -21,7 +21,6 @@ int main(int argc, char *argv[], char *envp[])
             "shell lab and VE482's project 1.\n\n");
         printf("Currently the project is still largely unfinished,\nwith the "
                "following features remain to be implemented:\n\n");
-        printf("2. I/O Redirection and PATH resolution\n");
         printf("3. Unix Pipes\n");
         printf("4. Background Jobs and Signals\n");
         printf("5. Built-in commands and expansion\n");
@@ -30,6 +29,7 @@ int main(int argc, char *argv[], char *envp[])
         printf("Currently these features are already implemented:\n\n");
         printf("0. (Kind of) functioning program that accepts 'exit'\n");
         printf("1. Execute single external commands with flags\n");
+        printf("2. I/O Redirection and PATH resolution\n");
         return 0;
     }
 
