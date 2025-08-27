@@ -3,6 +3,7 @@
 #include "parse.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "exec.h"
 
 int main(int argc, char *argv[], char *envp[])
 {
@@ -24,10 +25,10 @@ int main(int argc, char *argv[], char *envp[])
         printf("3. Unix Pipes\n");
         printf("4. Background Jobs and Signals\n");
         printf("5. Built-in commands and expansion\n");
-        printf("6. Error handing and potential robustness improv\n");
+        printf("6. Error handing and improved robustness\n");
         printf("\n");
         printf("Currently these features are already implemented:\n\n");
-        printf("0. A (kind of) functioning program that accepts 'exit'\n");
+        printf("0. (Kind of) functioning program that accepts 'exit'\n");
         printf("1. Execute single external commands with flags\n");
         return 0;
     }
@@ -36,6 +37,9 @@ int main(int argc, char *argv[], char *envp[])
 
     char *cmdline = cmdline_alloc();
     char **args = args_list_alloc();
+    commands *cmd = commands_alloc();
+
+    // char *command =
 
     while (1)
     {
@@ -49,12 +53,12 @@ int main(int argc, char *argv[], char *envp[])
 
         if (feof(stdin))
         {
-            free_all(cmdline, args);
+            free_all(cmdline, args, cmd);
             exit(0);
         }
-        eval(cmdline, args);
-        exec(cmdline, args,
-             envp); // how can I setup environ array to setup the env var?
+        eval(in_args, cmdline, args, cmd);
+        exec(in_args, cmdline, args,
+             envp,cmd); // how can I setup environ array to setup the env var?
     }
 
     free(cmdline);

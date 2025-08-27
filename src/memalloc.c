@@ -16,7 +16,14 @@ char **args_list_alloc()
     return ret;
 }
 
-void free_all(char *cmdline, char **args)
+commands *commands_alloc()
+{
+    commands *cmd = malloc(sizeof(commands));
+    cmd->command_list = malloc(sizeof(command) * MAX_CMD);
+    return cmd;
+}
+
+void free_all(char *cmdline, char **args, commands *cmd)
 {
     free(cmdline);
     for (int i = 1; i < MAX_ARGS; i++)
@@ -27,4 +34,6 @@ void free_all(char *cmdline, char **args)
         }
     }
     free(args);
+    free(cmd->command_list);
+    free(cmd);
 }

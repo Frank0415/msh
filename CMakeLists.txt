@@ -8,6 +8,7 @@ add_executable(my_shell
     src/main.c
     src/parse.c
     src/memalloc.c
+    src/exec.c
 )
 
 target_include_directories(my_shell PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
