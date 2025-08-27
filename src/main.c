@@ -13,6 +13,24 @@ int main(int argc, char *argv[], char *envp[])
         printf("The shell has no such option(s). \n");
         return 0;
     }
+    else if (in_args.help)
+    {
+        printf(
+            "Welcome to use my shell!\n\nThis project is a mix of 15-213's "
+            "shell lab and VE482's project 1.\n\n");
+        printf("Currently the project is still largely unfinished,\nwith the "
+               "following features remain to be implemented:\n\n");
+        printf("2. I/O Redirection and PATH resolution\n");
+        printf("3. Unix Pipes\n");
+        printf("4. Background Jobs and Signals\n");
+        printf("5. Built-in commands and expansion\n");
+        printf("6. Error handing and potential robustness improv\n");
+        printf("\n");
+        printf("Currently these features are already implemented:\n\n");
+        printf("0. A (kind of) functioning program that accepts 'exit'\n");
+        printf("1. Execute single external commands with flags\n");
+        return 0;
+    }
 
     // To Do: to be moved to a function
 
