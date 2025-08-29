@@ -43,11 +43,11 @@ void exec_redirect(commands *cmd)
     }
 }
 
-char *resolve_path(commands *cmds)
+char *resolve_path(char *cmd_name)
 {
-    if (strchr(cmds->command_list[0].cmd, '/'))
+    if (strchr(cmd_name, '/'))
     {
-        return strdup(cmds->command_list[0].cmd);
+        return strdup(cmd_name);
     }
     char *env = getenv("PATH");
     if (!env)
@@ -63,7 +63,7 @@ char *resolve_path(commands *cmds)
     while (dir)
     {
         char full_path[1024];
-        snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmds->command_list[0].cmd);
+        snprintf(full_path, sizeof(full_path), "%s/%s", dir, cmd_name);
         if (access(full_path, X_OK) == 0)
         {
             free(path_copy);
@@ -77,24 +77,36 @@ char *resolve_path(commands *cmds)
 
 void exec(args arg, char *cmd, char **args, char **envp, commands *cmds)
 {
-    if (strcmp(cmd, "exit") == 0)
-    {
-        free_all(cmd, args, cmds);
-        exit(0);
-    }
     // now I can only process command count of 1, for more commands it is
     // necessary to use pipes and more advanced function to run
-
+    if (arg.verbose)
+    {
+        for (int i = 0; i < cmds->command_count; i++)
+        {
+            fprintf(stderr, "number:%d\t", i);
+            for (int j = 0; j < cmds->command_list[i].argc; j++)
+                fprintf(stderr, "%dth cmd:%s\t", j,
+                        cmds->command_list[i].argv[j]);
+            fprintf(stderr, "\n");
+            fprintf(stderr,"stdin:%s\tstdout:%s\tis_overwrite:%d\n",cmds->command_list[i].filein,cmds->command_list[i].fileout,cmds->command_list[i].overwrite_true );
+        }
+    }
     for (int i = 0; i < cmds->command_count; i++)
     {
-        char *resolved_cmd = resolve_path(cmds);
+        if (strcmp(cmds->command_list[i].cmd, "exit") == 0)
+        {
+            free_all(cmd, args, cmds);
+            printf("exit\n");
+            exit(0);
+        }
+        char *resolved_cmd = resolve_path(cmds->command_list[i].cmd);
         if (arg.verbose)
         {
             printf("running process %s, number %d in stack\n", resolved_cmd, i);
         }
         if (!resolved_cmd)
         {
-            fprintf(stderr, "my shell: command not found: %s\n", cmds->command_list[0].cmd);
+            fprintf(stderr, "my shell: command not found: %s\n", cmds->command_list[i].cmd);
             continue;
         }
         pid_t pid = fork();

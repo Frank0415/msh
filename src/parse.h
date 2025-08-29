@@ -5,6 +5,5 @@
 
 args parseargs(int argc, char **argv);
 void eval(args arg, char *cmd, char **args, commands *cmds);
-void split(args arg, char *cmd, char **args, commands *cmds);
 
 #endif

@@ -20,6 +20,10 @@ commands *commands_alloc()
 {
     commands *cmd = malloc(sizeof(commands));
     cmd->command_list = malloc(sizeof(command) * MAX_CMD);
+    for (int i = 0; i < MAX_CMD; i++)
+    {
+        cmd->command_list[i].argv = malloc(sizeof(char *) * MAX_CMD);
+    }
     return cmd;
 }
 
@@ -34,6 +38,10 @@ void free_all(char *cmdline, char **args, commands *cmd)
         }
     }
     free(args);
+    for (int i = 0; i < MAX_CMD; i++)
+    {
+        free(cmd->command_list[i].argv);
+    }
     free(cmd->command_list);
     free(cmd);
 }

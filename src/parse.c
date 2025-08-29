@@ -6,16 +6,19 @@
 #include "unistd.h"
 #include <sys/wait.h>
 
-// Function declarations for modularity (helper functions only)
-void handle_space(char *cmd, char **args, int *args_count, int *last_avail_ptr, int *cmd_last_ptr, int i);
-void save_argument(char *cmd, char **args, int *args_count, int start, int end);
-void finalize_arguments(char *cmd, char **args, int *args_count, int last_avail_ptr, int i, int cmd_last_ptr);
-void print_debug_info(char *cmd, char **args, int args_count);
-void handle_redirect(char *cmd, commands *cmds, int *i);
+// Function prototypes for internal use
+void handle_redirect(char **args, commands *cmds, int *i, int flag);
+void handle_pipe(char **args, commands *cmds, int *i, int *arg_cnt);
+void handle_args(char **args, command *cmd, int *count, int *const i); // Changed to pointer to modify struct
+void init_next_cmd(commands *cmds);
+void ERR_double_redirect(int is_input);
+void ERR_syntax(const char *cmd);
+void ERR_missing_program();
 
+// Parses command-line arguments for the shell program itself (e.g., -h for help, -v for verbose)
 args parseargs(int argc, char **argv)
 {
-    args ret = {.help = 0, .wrong = 0};
+    args ret = {.help = 0, .wrong = 0, .verbose = 0}; // Initialize verbose to 0
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
@@ -34,209 +37,111 @@ args parseargs(int argc, char **argv)
     return ret;
 }
 
+// Main evaluation function: tokenizes the command string and parses pipes, redirects, and arguments
 void eval(args arg, char *cmd, char **args, commands *cmds)
 {
-    split(arg, cmd, args, cmds);
-}
+    int arg_cnt = 0;
+    cmds->command_count = 0;
 
-/*
-
-for command:
-ls -la\n
-01 2 345 6
-then last_avail_ptr = 3
-*/
-// 修改后的 split 函数
-void split(args arg, char *cmd, char **args, commands *cmds)
-{
-    // 初始化命令结构
-    cmds->command_count = 1;
-    cmds->command_list = malloc(sizeof(command));
-    cmds->command_list[0].cmd = cmd;
-    cmds->command_list[0].argv = args;
-    cmds->command_list[0].filein = NULL;
-    cmds->command_list[0].fileout = NULL;
-    cmds->command_list[0].overwrite_true = 0;
-    int args_count = 1;
-    int last_avail_ptr = 0;
-    int cmd_last_ptr = 0;
-    args[0] = cmd;
-    for (int i = 0; i < MAX_INPUT_LENGTH && cmd[i] != '\0'; i++)
+    // Tokenize the command string using space and newline as delimiters
+    args[arg_cnt] = strtok(cmd, " \t\n");
+    while (args[arg_cnt])
     {
-        if (cmd[i] == '\n' || cmd[i] == '\0')
+        // if (arg.verbose)
+        // {
+        //     printf("Argument %d: %s\t", arg_cnt, args[arg_cnt]);
+        // }
+        arg_cnt++;
+        args[arg_cnt] = strtok(NULL, " \t\n"); // Continue tokenization
+    }
+    if (arg.verbose){}
+    //     printf("\n");
+
+    init_next_cmd(cmds); // first command init
+    // Parse each token
+    for (int i = 0; i < arg_cnt; i++)
+    {
+        if (strcmp(args[i], "|") == 0) // Corrected: check for equality
         {
-            finalize_arguments(cmd, args, &args_count, last_avail_ptr, i, cmd_last_ptr);
-            args[args_count] = NULL;
-            if (arg.verbose)
-            {
-                print_debug_info(cmd, args, args_count);
-                fprintf(stderr, "redir in: %s\nredir out: %s\n",  cmds->command_list[0].fileout ? cmds->command_list[0].fileout : "NULL",cmds->command_list[0].fileout ? cmds->command_list[0].fileout : "NULL");
-            }
-            return;
+            handle_pipe(args, cmds, &i, &arg_cnt);
         }
-        else if (cmd[i] == ' ')
+        else if (strcmp(args[i], "<") == 0 || strcmp(args[i], ">>") == 0 ||
+                 strcmp(args[i], ">") == 0) // Corrected: check for equality
         {
-            // fprintf(stderr, "%d\n", i);
-            handle_space(cmd, args, &args_count, &last_avail_ptr, &cmd_last_ptr,
-                             i);
-        }
-        else if (cmd[i] == '<' || cmd[i] == '>')
-        {
-            // 处理重定向，但不将其作为参数
-            handle_redirect(cmd, cmds, &i);
-            // 重定向处理后，last_avail_ptr 需要更新到当前位置之后
-            last_avail_ptr = i + 1;
-        }
-    }
-}
-
-/**
- * Handles space characters: either marks the end of the command or saves an argument.
- */
-void handle_space(char *cmd, char **args, int *args_count, int *last_avail_ptr, int *cmd_last_ptr, int i)
-{
-    if (*cmd_last_ptr == 0)
-    {
-        // First space: mark command end
-        *cmd_last_ptr = i;
-        *last_avail_ptr = i + 1;
-    }
-    else if (*last_avail_ptr >= 0 && *last_avail_ptr < i)
-    {
-        // Subsequent space: save the current argument if there's content
-        save_argument(cmd, args, args_count, *last_avail_ptr, i);
-        *last_avail_ptr = i + 1;
-    }
-    else
-    {
-        // Consecutive spaces: just update last_avail_ptr
-        *last_avail_ptr = i + 1;
-    }
-}
-
-/**
- * Saves an argument from the command string into the args array.
- */
-void save_argument(char *cmd, char **args, int *args_count, int start, int end)
-{
-    int len = end - start;
-    if (len <= 0)
-    {
-        return; // Don't save empty arguments
-    }
-    if (len > 63)
-    {
-        free_all(cmd, args, NULL); // Pass NULL for commands (not used yet)
-        fprintf(stderr, "Sorry, currently args length longer than 64 are not supported.\n");
-        exit(0);
-    }
-    // Allocate memory for the argument
-    args[*args_count] = malloc((len + 1) * sizeof(char));
-    if (!args[*args_count])
-    {
-        fprintf(stderr, "Memory allocation failed for args[%d].\n", *args_count);
-        exit(1);
-    }
-    strncpy(args[*args_count], &cmd[start], len);
-    args[*args_count][len] = '\0';
-    // fprintf(stderr,"%d,%s\n",*args_count,args[*args_count]);
-    (*args_count)++;
-}
-
-/**
- * Finalizes arguments at the end of input (newline or null).
- */
-void finalize_arguments(char *cmd, char **args, int *args_count, int last_avail_ptr, int i, int cmd_last_ptr)
-{
-    if (last_avail_ptr >= 0 && last_avail_ptr < i && cmd_last_ptr > 0)
-    {
-        save_argument(cmd, args, args_count, last_avail_ptr, i);
-    }
-    // Null-terminate the command
-    if (cmd_last_ptr > 0)
-    {
-        cmd[cmd_last_ptr] = '\0';
-    }
-    else
-    {
-        cmd[i] = '\0';
-    }
-}
-
-/**
- * Handles IO redirects: < for input, > for output (overwrite), >> for output (append).
- */
-void handle_redirect(char *cmd, commands *cmds, int *i)
-{
-    if (cmd[*i] == '<')
-    {
-        // 输入重定向
-        (*i)++; // 跳过 '<'
-        // 跳过空格找到文件名
-        while (cmd[*i] == ' ')
-            (*i)++;
-
-        int start = *i;
-        // 找到文件名结束位置
-        while (cmd[*i] != ' ' && cmd[*i] != '\0' && cmd[*i] != '\n')
-            (*i)++;
-        int end = *i;
-
-        // 保存文件名
-        int len = end - start;
-        cmds->command_list[0].filein = malloc(len + 1);
-        strncpy(cmds->command_list[0].filein, &cmd[start], len);
-        cmds->command_list[0].filein[len] = '\0';
-
-        // 回退一步，让主循环继续处理
-        (*i)--;
-    }
-    else if (cmd[*i] == '>')
-    {
-        // 处理输出重定向
-        if (cmd[*i + 1] == '>')
-        {
-            // 追加模式 ">>"
-            cmds->command_list[0].overwrite_true = 0;
-            (*i) += 2; // 跳过 ">>"
+            int flag = (strcmp(args[i], "<") == 0) ? 0 : ((strcmp(args[i], ">") == 0) ? 1 : 2); // Corrected ternary logic
+            handle_redirect(args, cmds, &i, flag);
         }
         else
         {
-            // 覆盖模式 ">"
-            cmds->command_list[0].overwrite_true = 1;
-            (*i) += 1; // 跳过 ">"
+            handle_args(args, &cmds->command_list[cmds->command_count - 1], &cmds->command_list[cmds->command_count - 1].argc, &i); // Pass pointer to modify
         }
-
-        // 跳过空格找到文件名
-        while (cmd[*i] == ' ')
-            (*i)++;
-
-        int start = *i;
-        // 找到文件名结束位置
-        while (cmd[*i] != ' ' && cmd[*i] != '\0' && cmd[*i] != '\n')
-            (*i)++;
-        int end = *i;
-
-        // 保存文件名
-        int len = end - start;
-        cmds->command_list[0].fileout = malloc(len + 1);
-        strncpy(cmds->command_list[0].fileout, &cmd[start], len);
-        cmds->command_list[0].fileout[len] = '\0';
-
-        // 回退一步，让主循环继续处理
-        (*i)--;
     }
+    // Null-terminate the last command's argv (assuming argv is pre-allocated or handled elsewhere; add allocation if needed)
+    cmds->command_list[cmds->command_count - 1].argv[cmds->command_list[cmds->command_count - 1].argc] = NULL;
 }
 
-/**
- * Prints debug information
- */
-void print_debug_info(char *cmd, char **args, int args_count)
+// Handles redirection operators (<, >, >>)
+void handle_redirect(char **args, commands *cmds, int *i, int flag)
 {
-    fprintf(stderr, "Debug info:\n");
-    fprintf(stderr, "Command: %s\n", cmd);
-    for (int i = 0; i < args_count; i++)
+    // Determine input or output redirection based on flag (0: input, 1: output overwrite, 2: output append)
+    char **change = (!flag)
+                        ? &cmds->command_list[cmds->command_count - 1].filein
+                        : &cmds->command_list[cmds->command_count - 1].fileout; // Use pointer to modify
+    if (*change)
     {
-        fprintf(stderr, "args[%d]: %s\n", i, args[i]);
+        ERR_double_redirect((!flag) ? 1 : 0);
+    }
+    (*i)++;                                        // Move to the filename
+    if (*i >= /* some max, but assuming safe */ 0) // Removed erroneous condition check
+    {
+        *change = args[*i]; // Set the file
+    }
+    if (flag == 1) // Overwrite for '>'
+    {
+        cmds->command_list[cmds->command_count - 1].overwrite_true = 1;
     }
 }
+
+// Handles pipe operator (|)
+void handle_pipe(char **args, commands *cmds, int *i, int *arg_cnt)
+{
+    // Replace pipe with NULL to terminate current command's argv
+    args[*i] = NULL;
+    cmds->command_list[cmds->command_count - 1].argv[cmds->command_list[cmds->command_count - 1].argc] = args[*i];
+    init_next_cmd(cmds);
+    if (++(*i) == *arg_cnt) // Check if program is missing after pipe
+    {
+        ERR_missing_program();
+        return;
+    }
+}
+
+// Handles regular arguments for a command
+void handle_args(char **args, command *cmd, int *count, int *const i) // Changed to pointer
+{
+    cmd->argv[*count] = args[*i]; // Store argument
+    if (*count == 0)
+    {
+        cmd->cmd = args[*i]; // Set command name
+    }
+    (*count)++;
+}
+
+// Initializes the next command in the commands list
+void init_next_cmd(commands *cmds)
+{
+    // argv has already been allocated. No toucing argv here
+    cmds->command_count++;
+    cmds->command_list[cmds->command_count - 1].cmd = NULL;
+    cmds->command_list[cmds->command_count - 1].filein = NULL;
+    cmds->command_list[cmds->command_count - 1].fileout = NULL;
+    cmds->command_list[cmds->command_count - 1].overwrite_true = 0;
+    cmds->command_list[cmds->command_count - 1].argc = 0;
+}
+
+// Error functions
+void ERR_double_redirect(int is_input) { printf("error: duplicated %s redirection", is_input ? "input" : "output"); }
+
+void ERR_syntax(const char *cmd) { printf("syntax error near %s", cmd); }
+
+void ERR_missing_program() { printf("error: missing program"); }
